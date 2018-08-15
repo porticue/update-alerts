@@ -331,10 +331,8 @@ class Update_Alerts_Admin {
                 $this->sendAlert($result, $data, $summary, $description);
             }
         }
-        /*Check for Theme Updates
+        //Check for Theme Updates
         $update_themes = get_site_transient( 'update_themes' );
-        PC::debug($update_themes);
-        PC::debug(strtolower(get_option('current_theme')));
         if ( ! empty($update_themes->response) ) {
             $themes_needupdate = $update_themes->response;
             $active_themes = array();
@@ -348,19 +346,31 @@ class Update_Alerts_Admin {
             }else{
                 array_push($active_themes, strtolower(get_option('current_theme')));
             }
-
-            foreach ( $themes_needupdate as $key => $value ) {
-                if ( in_array($key, $active_themes)) {
-
+            foreach ( $themes_needupdate as $update_theme ) {
+                //loop through each active theme (may be multiple if on multisite)
+                //compare against themes that need updates
+                foreach($active_themes as $theme){
+                    $theme_name = $update_theme['theme'];
+                    if (strpos($theme, $theme_name) !== false) {
+                        //active theme needs an update. Run check if alert is needed
+                        $result = $this->getEntry($theme);
+                        $summary = 'Summary: Theme update available for ' . $theme . '<br />';
+                        $description = 'Description: ' . $theme . ' requires an update. The new version is ' . $update_theme[''] . '. You can find more about this update at '. $update_theme['url'] . '<br />';
+                        $data = array('plugin_name' => $theme_name, 'current_version' => $update_themes->checked[$theme_name], 'updated_version' => $update_theme['new_version'], 'date' => date("Y-m-d H:i:s"));
+                        $this->sendAlert($result, $data, $summary, $description);
+                    }
                 }
+
             }
         }
-        */
+
     }
 
     private function sendAlert($result, $data, $summary, $description){
         global $wpdb;
+        PC::debug("SendAlert");
         if(! empty($result)){
+
 
             if($data['current_version'] != $result['current_version'])
             {
