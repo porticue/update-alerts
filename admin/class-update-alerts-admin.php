@@ -116,15 +116,24 @@ class Update_Alerts_Admin {
      * @since  1.0.0
      */
     public function add_options_page() {
-        $this->plugin_screen_hook_suffix = add_submenu_page(
-            'settings.php',
-            __( 'Update Alerts Settings', 'update-alerts' ),
-            __( 'Update Alerts', 'update-alerts' ),
-            'manage_network_options',
-            $this->plugin_name,
-            array( $this, 'display_options_page' )
-        );
-
+        if ( is_multisite() ){
+            $this->plugin_screen_hook_suffix = add_submenu_page(
+                'settings.php',
+                __( 'Update Alerts Settings', 'update-alerts' ),
+                __( 'Update Alerts', 'update-alerts' ),
+                'manage_network_options',
+                $this->plugin_name,
+                array( $this, 'display_options_page' )
+            );
+        }else{
+            add_options_page(
+                __( 'Update Alerts', 'update-alerts' ),
+                __( 'Update Alerts', 'update-alerts' ),
+                'manage_options',
+                $this->plugin_name,
+                array( $this, 'display_options_page' )
+            );
+        }
     }
 
     /**
@@ -135,6 +144,7 @@ class Update_Alerts_Admin {
     public function display_options_page() {
 
         include_once 'partials/update-alerts-admin-display.php';
+        $this->update_ua_options();
     }
 
     /**
@@ -153,7 +163,7 @@ class Update_Alerts_Admin {
 
         add_settings_field(
                 $this->option_name . '_projectSlug',
-                __( 'Name of the project repository', 'update-alerts' ),
+                __( 'Site name identifier', 'update-alerts' ),
                 array( $this, $this->option_name . '_projectSlug_cb' ),
                 $this->plugin_name,
                 $this->option_name . '_general',
@@ -170,7 +180,7 @@ class Update_Alerts_Admin {
         );
 
         add_settings_field(
-                $this->option_name . '_secondaryEmail',
+                $this->option_name . '_secondEmail',
                 __( 'Second email to send alert', 'update-alerts' ),
                 array( $this, $this->option_name . '_secondEmail_cb' ),
                 $this->plugin_name,
@@ -190,14 +200,27 @@ class Update_Alerts_Admin {
     }
 
     public function update_ua_options(){
+
         if ( ! empty( $_POST ) && check_admin_referer( 'Update_UA_Options', 'update_alerts_nonce' ) ) {
-            if(!current_user_can('manage_network_options')) wp_die('FU');
+            if(is_multisite()){
+                if(!current_user_can('manage_network_options')) wp_die('FU');
+            }else{
+                if(!current_user_can('manage_options')) wp_die('FU');
+            }
+
             update_site_option($this->option_name . '_projectSlug', sanitize_text_field( $_POST[$this->option_name . '_projectSlug']));
             update_site_option($this->option_name . '_emailTo', $this->update_alerts_sanitize_email($_POST[$this->option_name . '_emailTo']));
             update_site_option($this->option_name . '_secondEmail', $this->update_alerts_sanitize_email($_POST[$this->option_name . '_secondEmail']));
             update_site_option($this->option_name . '_day', intval($_POST[$this->option_name . '_day']));
+
+            if(!is_multisite()){
+                wp_redirect(add_query_arg(array('page' => 'update-alerts', 'updated' => 'true'), admin_url('options-general.php')));
+            }
         }
-        wp_redirect(add_query_arg(array('page' => 'update-alerts', 'updated' => 'true'), network_admin_url('settings.php')));
+        if( is_multisite() ){
+            wp_redirect(add_query_arg(array('page' => 'update-alerts', 'updated' => 'true'), network_admin_url('settings.php')));
+        }
+
         exit();
     }
 
@@ -208,7 +231,7 @@ class Update_Alerts_Admin {
      */
     public function update_alerts_general_cb() {
 
-        echo '<p>' . __( 'Please change the settings accordingly.', 'update-alerts' ) . '</p>';
+        echo '<p>' . __( 'Required to have a valid email. Secondary email is optional. An email will be sent per plugin update. These emails can then be used to trigger ticket creations through 3rd party applications.', 'update-alerts' ) . '</p>';
     }
 
     /**
@@ -219,6 +242,7 @@ class Update_Alerts_Admin {
     public function update_alerts_projectSlug_cb() {
         $projectSlug = get_site_option( $this->option_name . '_projectSlug' );
         echo '<input type="text" name="' . $this->option_name . '_projectSlug' . '" id="' . $this->option_name . '_projectSlug' . '" value="' . $projectSlug . '">';
+        echo '<br/><span style="font-size: 8pt">*If using Flow to create Jira ticket this will be project repo name.</span>';
     }
 
     /**
@@ -229,6 +253,7 @@ class Update_Alerts_Admin {
     public function update_alerts_emailTo_cb() {
         $emailTo = get_site_option( $this->option_name . '_emailTo' );
         echo '<input type="text" name="' . $this->option_name . '_emailTo' . '" id="' . $this->option_name . '_emailTo' . '" value="' . $emailTo . '">';
+        echo '<br/><span style="font-size: 8pt">*Required.</span>';
     }
 
     /**
@@ -249,6 +274,7 @@ class Update_Alerts_Admin {
     public function update_alerts_day_cb() {
         $day = get_site_option( $this->option_name . '_day' );
         echo '<input type="text" name="' . $this->option_name . '_day' . '" id="' . $this->option_name . '_day' . '" value="' . $day . '"> ' . __( 'days', 'update-alerts' );
+        echo '<br/><span style="font-size: 8pt">*If 0 days, reminder alerts will not be sent.</span>';
     }
 
     /**
@@ -304,11 +330,32 @@ class Update_Alerts_Admin {
                 $data = array('plugin_name' => $plugin->slug, 'current_version' => $update_plugins->checked[$plugin->plugin], 'updated_version' => $plugin->new_version, 'date' => date("Y-m-d H:i:s"));
                 $this->sendAlert($result, $data, $summary, $description);
             }
-        }else{
-            //No updates available. move along
         }
+        /*Check for Theme Updates
+        $update_themes = get_site_transient( 'update_themes' );
+        PC::debug($update_themes);
+        PC::debug(strtolower(get_option('current_theme')));
+        if ( ! empty($update_themes->response) ) {
+            $themes_needupdate = $update_themes->response;
+            $active_themes = array();
+            if(is_multisite()){
+                $sites = wp_get_sites();
+                foreach ($sites as $site) {
+                    switch_to_blog($site['blog_id']);
+                    array_push($active_themes, strtolower(get_option('current_theme')));
+                    restore_current_blog();
+                }
+            }else{
+                array_push($active_themes, strtolower(get_option('current_theme')));
+            }
 
-        //$result = wp_mail(get_site_option( $this->option_name . '_emailTo' ), 'Plugin Updates', $message);
+            foreach ( $themes_needupdate as $key => $value ) {
+                if ( in_array($key, $active_themes)) {
+
+                }
+            }
+        }
+        */
     }
 
     private function sendAlert($result, $data, $summary, $description){

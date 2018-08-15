@@ -14,7 +14,7 @@
 ?>
 <div class="wrap">
     <h2><?php echo esc_html( get_admin_page_title() ); ?></h2>
-    <form action="edit.php?action=Update_UA_Options" method="post">
+    <form <?php if(is_multisite()){echo'action="edit.php?action=Update_UA_Options"';};?> method="post">
         <?php
         settings_fields( $this->plugin_name );
         do_settings_sections( $this->plugin_name );

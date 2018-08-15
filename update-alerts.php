@@ -15,12 +15,12 @@
  * @wordpress-plugin
  * Plugin Name:       Update Alerts
  * Plugin URI:        http://wordpress.org/plugins/update-alerts
- * Description:       This is a short description of what the plugin does. It's displayed in the WordPress admin area.
+ * Description:       Alert admins to plugin and WordPress core updates
  * Version:           1.0.0
  * Author:            Andrew Karetas
  * Author URI:        http://therevoltgroup.com
- * License:           GPL-2.0+
- * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
+ * License:           GPL-3.0+
+ * License URI:       http://www.gnu.org/licenses/gpl-3.0.txt
  * Text Domain:       update-alerts
  * Domain Path:       /languages
  */
