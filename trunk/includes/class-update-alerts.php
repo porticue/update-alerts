@@ -67,8 +67,8 @@ class Update_Alerts {
 	 * @since    1.0.0
 	 */
 	public function __construct() {
-		if ( defined( 'PLUGIN_NAME_VERSION' ) ) {
-			$this->version = PLUGIN_NAME_VERSION;
+		if ( defined( 'UPDATE_ALERTS_VERSION' ) ) {
+			$this->version = UPDATE_ALERTS_VERSION;
 		} else {
 			$this->version = '1.0.0';
 		}
@@ -158,8 +158,8 @@ class Update_Alerts {
 
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_styles' );
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
-        $this->loader->add_action( 'network_admin_menu', $plugin_admin, 'add_options_page' );
-        $this->loader->add_action( 'admin_menu', $plugin_admin, 'add_options_page' );
+        $this->loader->add_action( 'network_admin_menu', $plugin_admin, 'add_ua_options_page' );
+        $this->loader->add_action( 'admin_menu', $plugin_admin, 'add_ua_options_page' );
         $this->loader->add_action( 'admin_init', $plugin_admin, 'register_setting' );
         $this->loader->add_action( 'update_alerts_refresh', $plugin_admin, 'update_alerts_updatechecker' );
         $this->loader->add_action( 'network_admin_edit_Update_UA_Options', $plugin_admin, 'update_ua_options');

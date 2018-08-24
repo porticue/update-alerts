@@ -16,7 +16,7 @@
  * Plugin Name:       Update Alerts
  * Plugin URI:        http://wordpress.org/plugins/update-alerts
  * Description:       Alert admins to plugin and WordPress core updates
- * Version:           1.0.0
+ * Version:           1.1.0
  * Author:            Andrew Karetas
  * Author URI:        http://therevoltgroup.com
  * License:           GPL-3.0+
@@ -35,7 +35,7 @@ if ( ! defined( 'WPINC' ) ) {
  * Start at version 1.0.0 and use SemVer - https://semver.org
  * Rename this for your plugin and update it as you release new versions.
  */
-define( 'PLUGIN_NAME_VERSION', '1.0.0' );
+define( 'UPDATE_ALERTS_VERSION', '1.1.0' );
 
 /**
  * The code that runs during plugin activation.

@@ -1,7 +1,7 @@
 === Update Alerts ===
 Contributors: porticue
 Author URI: http://therevoltgroup.com
-Author: Andrew Karetas
+Author: The Revolt Group
 Donate link: https://paypal.me/porticue
 Tags: plugin_management, plugin_alerts
 Requires at least: 4.6
@@ -33,11 +33,17 @@ You can configure emails to be sent out to specified addresses.
 
 == Changelog ==
 
+= 1.1.0 =
+* Added Microsoft Flow support
+
 = 1.0 =
 * Initial version
 
 
 == Upgrade Notice ==
+
+= 1.1.0 =
+This update allows the direct calling of Microsoft Flow. Using an Http Request action as the entry point into the Flow will provide a request address string. Supply that address string in the plugin settings.
 
 = 1.0 =
 This is the initial release

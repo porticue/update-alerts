@@ -1,5 +1,7 @@
 <?php
 require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/objects/Plugin.php';
+if( !class_exists( 'WP_Http' ) )
+    include_once( ABSPATH . WPINC. '/class-http.php' );
 
 /**
  * The admin-specific functionality of the plugin.
@@ -115,7 +117,7 @@ class Update_Alerts_Admin {
      *
      * @since  1.0.0
      */
-    public function add_options_page() {
+    public function add_ua_options_page() {
         if ( is_multisite() ){
             $this->plugin_screen_hook_suffix = add_submenu_page(
                 'settings.php',
@@ -171,21 +173,12 @@ class Update_Alerts_Admin {
         );
 
         add_settings_field(
-            $this->option_name . '_emailTo',
-            __( 'Where to send alert', 'update-alerts' ),
-            array( $this, $this->option_name . '_emailTo_cb' ),
+            $this->option_name . '_issueType',
+            __( 'Jira issue type id', 'update-alerts' ),
+            array( $this, $this->option_name . '_issueType_cb' ),
             $this->plugin_name,
             $this->option_name . '_general',
-            array( 'label_for' => $this->option_name . '_emailTo' )
-        );
-
-        add_settings_field(
-                $this->option_name . '_secondEmail',
-                __( 'Second email to send alert', 'update-alerts' ),
-                array( $this, $this->option_name . '_secondEmail_cb' ),
-                $this->plugin_name,
-                $this->option_name . '_general',
-                array( 'label_for' => $this->option_name . '_secondEmail' )
+            array( 'label_for' => $this->option_name . '_issueType' )
         );
 
         add_settings_field(
@@ -197,10 +190,52 @@ class Update_Alerts_Admin {
             array( 'label_for' => $this->option_name . '_day' )
         );
 
+        // Add an Email Alert section
+        add_settings_section(
+            $this->option_name . '_email',
+            __( 'Email Alerts', 'update-alerts' ),
+            array( $this, $this->option_name . '_email_cb' ),
+            $this->plugin_name
+        );
+
+        add_settings_field(
+            $this->option_name . '_emailTo',
+            __( 'Where to send alert', 'update-alerts' ),
+            array( $this, $this->option_name . '_emailTo_cb' ),
+            $this->plugin_name,
+            $this->option_name . '_email',
+            array( 'label_for' => $this->option_name . '_emailTo' )
+        );
+
+        add_settings_field(
+                $this->option_name . '_secondEmail',
+                __( 'Second email to send alert', 'update-alerts' ),
+                array( $this, $this->option_name . '_secondEmail_cb' ),
+                $this->plugin_name,
+                $this->option_name . '_email',
+                array( 'label_for' => $this->option_name . '_secondEmail' )
+        );
+
+        // Add an Microsoft Flow section
+        add_settings_section(
+            $this->option_name . '_flow',
+            __( 'Microsoft Flow Alerts', 'update-alerts' ),
+            array( $this, $this->option_name . '_flow_cb' ),
+            $this->plugin_name
+        );
+
+        add_settings_field(
+            $this->option_name . '_flowEndpoint',
+            __( 'API endpoint to trigger Microsoft Flow', 'update-alerts' ),
+            array( $this, $this->option_name . '_flowEndpoint_cb' ),
+            $this->plugin_name,
+            $this->option_name . '_flow',
+            array( 'label_for' => $this->option_name . '_flowEndpoint' )
+        );
+
     }
 
     public function update_ua_options(){
-
         if ( ! empty( $_POST ) && check_admin_referer( 'Update_UA_Options', 'update_alerts_nonce' ) ) {
             if(is_multisite()){
                 if(!current_user_can('manage_network_options')) wp_die('FU');
@@ -209,16 +244,18 @@ class Update_Alerts_Admin {
             }
 
             update_site_option($this->option_name . '_projectSlug', sanitize_text_field( $_POST[$this->option_name . '_projectSlug']));
+            update_site_option($this->option_name . '_issueType', intval( $_POST[$this->option_name . '_issueType']));
+            update_site_option($this->option_name . '_day', intval($_POST[$this->option_name . '_day']));
             update_site_option($this->option_name . '_emailTo', $this->update_alerts_sanitize_email($_POST[$this->option_name . '_emailTo']));
             update_site_option($this->option_name . '_secondEmail', $this->update_alerts_sanitize_email($_POST[$this->option_name . '_secondEmail']));
-            update_site_option($this->option_name . '_day', intval($_POST[$this->option_name . '_day']));
+            update_site_option($this->option_name . '_flowEndpoint', esc_url_raw($_POST[$this->option_name . '_flowEndpoint'], array("http","https")));
 
             if(!is_multisite()){
                 wp_redirect(add_query_arg(array('page' => 'update-alerts', 'updated' => 'true'), admin_url('options-general.php')));
             }
-        }
-        if( is_multisite() ){
-            wp_redirect(add_query_arg(array('page' => 'update-alerts', 'updated' => 'true'), network_admin_url('settings.php')));
+            if( is_multisite() ){
+                wp_redirect(add_query_arg(array('page' => 'update-alerts', 'updated' => 'true'), network_admin_url('settings.php')));
+            }
         }
 
         exit();
@@ -231,7 +268,8 @@ class Update_Alerts_Admin {
      */
     public function update_alerts_general_cb() {
 
-        echo '<p>' . __( 'Required to have a valid email. Secondary email is optional. An email will be sent per plugin update. These emails can then be used to trigger ticket creations through 3rd party applications.', 'update-alerts' ) . '</p>';
+        echo '<p>' . __( 'Project slug will be used as a general identifier. If your endpoint is Jira ticket creation this value will need to be the exact project key string.', 'update-alerts' ) . '</p>';
+        echo '<p>' . __( 'Issue type is optional. However if Jira is your endpoint this value will need to be an Issue Id that exists in your Jira project.' ) . '</p>';
     }
 
     /**
@@ -242,7 +280,27 @@ class Update_Alerts_Admin {
     public function update_alerts_projectSlug_cb() {
         $projectSlug = get_site_option( $this->option_name . '_projectSlug' );
         echo '<input type="text" name="' . $this->option_name . '_projectSlug' . '" id="' . $this->option_name . '_projectSlug' . '" value="' . $projectSlug . '">';
-        echo '<br/><span style="font-size: 8pt">*If using Flow to create Jira ticket this will be project repo name.</span>';
+    }
+
+    /**
+     * Render the text input for issue type to option
+     *
+     * @since  1.1.0
+     */
+    public function update_alerts_issueType_cb() {
+        $issueType = get_site_option( $this->option_name . '_issueType' );
+        echo '<input type="text" name="' . $this->option_name . '_issueType' . '" id="' . $this->option_name . '_issueType' . '" value="' . $issueType . '">';
+    }
+
+    /**
+     * Render the text for the email alert section
+     *
+     * @since  1.1.0
+     */
+    public function update_alerts_email_cb() {
+
+        echo '<p>' . __( 'Provide up to two email addresses to be used for email alerts.', 'update-alerts' ) . '</p>';
+        echo '<p>' . __( 'If left blank email alerts will not be sent.', 'update-alerts' ) . '</p>';
     }
 
     /**
@@ -253,7 +311,6 @@ class Update_Alerts_Admin {
     public function update_alerts_emailTo_cb() {
         $emailTo = get_site_option( $this->option_name . '_emailTo' );
         echo '<input type="text" name="' . $this->option_name . '_emailTo' . '" id="' . $this->option_name . '_emailTo' . '" value="' . $emailTo . '">';
-        echo '<br/><span style="font-size: 8pt">*Required.</span>';
     }
 
     /**
@@ -264,6 +321,30 @@ class Update_Alerts_Admin {
     public function update_alerts_secondEmail_cb() {
         $secondEmail = get_site_option( $this->option_name . '_secondEmail' );
         echo '<input type="text" name="' . $this->option_name . '_secondEmail' . '" id="' . $this->option_name . '_secondEmail' . '" value="' . $secondEmail . '">';
+    }
+
+    /**
+     * Render the text for the flow alert section
+     *
+     * @since  1.1.0
+     */
+    public function update_alerts_flow_cb()
+    {
+
+        echo '<p>' . __('Provide API address of configured Microsoft Flow.', 'update-alerts') . '</p>';
+        echo '<p>' . __('Plugin will send a JSON body containing: projectslug, issueType, summary, and description', 'update-alerts') . '</p>';
+        echo '<p>' . __('If left blank Flow alerts will not be sent.', 'update-alerts') . '</p>';
+    }
+
+
+        /**
+     * Render the text input for Microsoft flow option
+     *
+     * @since  1.1.0
+     */
+    public function update_alerts_flowEndpoint_cb() {
+        $endpoint = get_site_option( $this->option_name . '_flowEndpoint' );
+        echo '<input class="regular-text" type="text" name="' . $this->option_name . '_flowEndpoint' . '" id="' . $this->option_name . '_flowEndpoint' . '" value="' . $endpoint . '">';
     }
 
     /**
@@ -340,22 +421,24 @@ class Update_Alerts_Admin {
                 $sites = wp_get_sites();
                 foreach ($sites as $site) {
                     switch_to_blog($site['blog_id']);
-                    array_push($active_themes, strtolower(get_option('current_theme')));
+                    $active_themes[strtolower(get_option('current_theme'))] = "update";
+                    //array_push($active_themes, strtolower(get_option('current_theme')));
                     restore_current_blog();
                 }
             }else{
-                array_push($active_themes, strtolower(get_option('current_theme')));
+                $active_themes[strtolower(get_option('current_theme'))] = "update";
+                //array_push($active_themes, strtolower(get_option('current_theme')));
             }
             foreach ( $themes_needupdate as $update_theme ) {
                 //loop through each active theme (may be multiple if on multisite)
                 //compare against themes that need updates
-                foreach($active_themes as $theme){
+                foreach($active_themes as $theme => $value){
                     $theme_name = $update_theme['theme'];
                     if (strpos($theme, $theme_name) !== false) {
                         //active theme needs an update. Run check if alert is needed
-                        $result = $this->getEntry($theme);
-                        $summary = 'Summary: Theme update available for ' . $theme . '<br />';
-                        $description = 'Description: ' . $theme . ' requires an update. The new version is ' . $update_theme[''] . '. You can find more about this update at '. $update_theme['url'] . '<br />';
+                        $result = $this->getEntry($theme_name);
+                        $summary = 'Summary: Theme update available for ' . $theme_name . '<br />';
+                        $description = 'Description: ' . $theme . ' requires an update. The new version is ' . $update_theme['new_version'] . '. You can find more about this update at '. $update_theme['url'] . '<br />';
                         $data = array('plugin_name' => $theme_name, 'current_version' => $update_themes->checked[$theme_name], 'updated_version' => $update_theme['new_version'], 'date' => date("Y-m-d H:i:s"));
                         $this->sendAlert($result, $data, $summary, $description);
                     }
@@ -368,30 +451,39 @@ class Update_Alerts_Admin {
 
     private function sendAlert($result, $data, $summary, $description){
         global $wpdb;
-        PC::debug("SendAlert");
+        $flowEndpoint = get_site_option( $this->option_name . '_flowEndpoint' );
+        $issueType = get_site_option( $this->option_name . '_issueType' );
+        $project = get_site_option($this->option_name . '_projectSlug');
+        $emailTo = get_site_option($this->option_name . '_emailTo');
+        $secondEmail = get_site_option( $this->option_name . '_secondEmail');
         if(! empty($result)){
-
-
             if($data['current_version'] != $result['current_version'])
             {
                 //plugin was updated since last check, but new version is now available. update database entry
                 $wpdb->update($wpdb->prefix . 'update_alerts', $data, array( 'plugin_name' => $data['plugin_name'] ) );
                 //send new alert
-                wp_mail(get_site_option( $this->option_name . '_emailTo' ), 'Plugin Update: ' . get_site_option( $this->option_name . '_projectSlug' ), $summary . $description . 'End');
-                if(get_site_option( $this->option_name . '_secondEmail') != ''){
-                    wp_mail(get_site_option( $this->option_name . '_secondEmail' ), 'Plugin Update: ' . get_site_option( $this->option_name . '_projectSlug' ), $summary . $description . 'End');
+                if($emailTo != '') {
+                    wp_mail($emailTo, 'Plugin Update: ' . $project, $summary . $description . 'End');
+                }
+                if($secondEmail != ''){
+                    wp_mail($secondEmail, 'Plugin Update: ' . $project, $summary . $description . 'End');
+                }
+                //if Microsoft Flow endpoint was supplied send Flow alert
+                if($flowEndpoint != ''){
+                    $this->sendFlow( $flowEndpoint, $project, $issueType, $summary, $description );
                 }
 
-            }elseif ($data['updated_version'] != $result['updated_version'])
-            {
+            }elseif ($data['updated_version'] != $result['updated_version']) {
                 //plugin hasn't been updated since last check but the available updated version of the plugin has increased
                 //don't send alert
                 //update db entry
-                $wpdb->update($wpdb->prefix . 'update_alerts', $data, array( 'plugin_name' => $data['plugin_name'] ) );
+                $wpdb->update($wpdb->prefix . 'update_alerts', $data, array('plugin_name' => $data['plugin_name']));
                 //todo: update jira ticket to include new updated version
-                wp_mail(get_site_option( $this->option_name . '_emailTo' ), 'Plugin Reminder: ' . get_site_option( $this->option_name . '_projectSlug' ), $data['plugin_name'] . " hasn't been updated and the updated version has increased to " . $data['updated_version']);
-                if(get_site_option( $this->option_name . '_secondEmail') != ''){
-                    wp_mail(get_site_option( $this->option_name . '_secondEmail' ), 'Plugin Reminder: ' . get_site_option( $this->option_name . '_projectSlug' ), $data['plugin_name'] . " hasn't been updated and the updated version has increased to " . $data['updated_version']);
+                if($emailTo != '') {
+                    wp_mail($emailTo, 'Plugin Reminder: ' . $project, $data['plugin_name'] . " hasn't been updated and the updated version has increased to " . $data['updated_version']);
+                }
+                if($secondEmail != ''){
+                    wp_mail($secondEmail, 'Plugin Reminder: ' . $project, $data['plugin_name'] . " hasn't been updated and the updated version has increased to " . $data['updated_version']);
                 }
             }else {
                 //Alert was already sent
@@ -402,12 +494,33 @@ class Update_Alerts_Admin {
         }else{
             //There is a new plugin update, add database entry
             $wpdb->insert($wpdb->prefix . 'update_alerts', $data);
-            //send alert
-            wp_mail(get_site_option( $this->option_name . '_emailTo' ), 'Plugin Update: ' . get_site_option( $this->option_name . '_projectSlug' ), $summary . $description . 'End');
-            if(get_site_option( $this->option_name . '_secondEmail') != ''){
-                wp_mail(get_site_option( $this->option_name . '_secondEmail' ), 'Plugin Update: ' . get_site_option( $this->option_name . '_projectSlug' ), $summary . $description . 'End');
+            //if email addresses exist send email alert
+            if($emailTo != '') {
+                wp_mail($emailTo, 'Plugin Update: ' . $project, $summary . $description . 'End');
+            }
+            if($secondEmail != ''){
+                wp_mail($secondEmail, 'Plugin Update: ' . $project, $summary . $description . 'End');
+            }
+            //if Microsoft Flow endpoint was supplied send Flow alert
+            if($flowEndpoint != ''){
+                $this->sendFlow( $flowEndpoint, $project, $issueType, $summary, $description );
             }
         }
+    }
+
+    private function sendFlow ( $url, $project, $issueType, $summary, $description){
+
+        $headers = array(
+            'Content-Type' => 'application/json',
+            'Cache-Control' => 'no-cache'
+        );
+        $args = array(
+            'body' => "{\"projectslug\": \"$project\", \"issuetype\": \"$issueType\", \"summary\": \"$summary\",\"description\": \"$description\"}",
+            'timeout' => '30',
+            'headers' => $headers,
+            'blocking' => false
+        );
+        $response = wp_remote_post( esc_url_raw($url), $args );
     }
 
     private function getEntry( $plugin_name ){
